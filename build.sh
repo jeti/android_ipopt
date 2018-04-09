@@ -105,7 +105,7 @@ if [ ! -f ${BASE}/config.sub ] ; then
     wget -O config.sub 'http://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.sub;hb=HEAD'
 fi
 
-# Now replace config.guess and config.sub in all of the IPOPT files 
+# Replace config.guess and config.sub in all of the IPOPT files 
 echo -e "${colored}Replacing config.guess${normal}" && echo 
 find ${BASE}/ipopt -type f -name "config.guess" | while read file; do
     cp ${BASE}/config.guess ${file}
@@ -114,6 +114,13 @@ done
 echo -e "${colored}Replacing config.sub${normal}" && echo 
 find ${BASE}/ipopt -type f -name "config.sub" | while read file; do
     cp ${BASE}/config.sub ${file}
+done
+
+# There seems to be a problem in the configure scripts where they are accidentally grabbing an 
+# extra ' when finding the math library. Specifically, it is found as -lm' instead of -lm
+echo -e "${colored}Replacing FLIBS in configure files${normal}" && echo 
+find ${BASE}/ipopt -type f -name "configure" | while read file; do
+    sed -i 's|FLIBS="$ac_cv_f77_libs"|FLIBS=${ac_cv_f77_libs/"-lm'"'"'"/"-lm"}|g' ${file}
 done
 
 # Now we will build BLAS, LAPACK, and IPOPT for each of the desired systems. 
@@ -154,7 +161,7 @@ for (( i=0; i<${N_SYSTEMS}; i++ )) ; do
         mkdir -p build/${SYSTEMS[$i]}
         cd build/${SYSTEMS[$i]}
         ../../configure --prefix=$BUILD_DIR --host="${HEADERS[$i]}" --disable-shared --with-pic \
-            --with-blas="$BUILD_DIR/lib/libcoinblas.a -lgfortran"
+            --with-blas="$BUILD_DIR/libcoinblas.a -lgfortran"
         make install
         cd $BASE
     
@@ -163,8 +170,8 @@ for (( i=0; i<${N_SYSTEMS}; i++ )) ; do
         cd $BASE/ipopt
         ./configure --prefix=$BUILD_DIR --host="${HEADERS[$i]}" --disable-shared --with-pic \
             coin_skip_warn_cxxflags=yes \
-            --with-blas="$prefix/lib/libcoinblas.a -lgfortran" \
-            --with-lapack=$BUILD_DIR/lib/libcoinlapack.a
+            --with-blas="$BUILD_DIR/libcoinblas.a -lgfortran" \
+            --with-lapack=$BUILD_DIR/libcoinlapack.a
         make
         make -j4 install
         cd $BASE
