@@ -1,3 +1,5 @@
+set -e
+
 # Specify which version of IPOPT you want 
 ipopt_version="3.12.9"
 
@@ -93,58 +95,90 @@ if [ ! -d ipopt ] ; then
      
 fi
 
-exit 0
+# Get the newest versions of config.guess and config.sub
+if [ ! -f ${BASE}/config.guess ] ; then
+    echo -e "${colored}Downloading the newest version of config.guess${normal}" && echo 
+    wget -O config.guess 'http://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.guess;hb=HEAD'
+fi
+if [ ! -f ${BASE}/config.sub ] ; then
+    echo -e "${colored}Downloading the newest version of config.sub${normal}" && echo 
+    wget -O config.sub 'http://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.sub;hb=HEAD'
+fi
+
+# Now replace config.guess and config.sub in all of the IPOPT files 
+echo -e "${colored}Replacing config.guess${normal}" && echo 
+find ${BASE}/ipopt -type f -name "config.guess" | while read file; do
+    cp ${BASE}/config.guess ${file}
+done
+
+echo -e "${colored}Replacing config.sub${normal}" && echo 
+find ${BASE}/ipopt -type f -name "config.sub" | while read file; do
+    cp ${BASE}/config.sub ${file}
+done
 
 # Now we will build BLAS, LAPACK, and IPOPT for each of the desired systems. 
-for system in "${systems[@]}" ; do
+for (( i=0; i<${N_SYSTEMS}; i++ )) ; do 
     
     mkdir -p $BASE/ipopt/build
     
     # See if we already built for this system
-    if [ ! -d $BASE/ipopt/build/$system ] ; then
+    if [ ! -d $BASE/ipopt/build/${SYSTEMS[$i]} ] ; then
     
         # Define the folder where we will dump all of the built files 
-        BUILD_DIR=$BASE/ipopt/build/$system
+        BUILD_DIR=$BASE/ipopt/build/${SYSTEMS[$i]}
         
-        # Specify the compilers and sysroot
-        source $BASE/setenv/$system.sh
-        _SYSROOT=$SYSROOT
-        _CC=$CC
-        _CXX=$CXX
-        _FC=$FC
-        export SYSROOT=$BASE/../toolchains/$system
-        export CC=$SYSROOT/bin/${HEADER}-gcc
-        export CXX=$SYSROOT/bin/${HEADER}-g++
-        export FC=$SYSROOT/bin/${HEADER}-gfortran
+        # Specify the variables for compiling
+        TOOLCHAIN_BIN=${TOOLCHAINS}/${SYSTEMS[$i]}/bin
+        export F77=${TOOLCHAIN_BIN}/${HEADERS[$i]}-gfortran
+        export CC=${TOOLCHAIN_BIN}/${HEADERS[$i]}-gcc
+        export CPP=${TOOLCHAIN_BIN}/${HEADERS[$i]}-cpp
+        export CXX=${TOOLCHAIN_BIN}/${HEADERS[$i]}-g++
         
+        export CFLAGS="--sysroot=${TOOLCHAINS}/${SYSTEMS[$i]}/sysroot"
+        export CXXFLAGS="--sysroot=${TOOLCHAINS}/${SYSTEMS[$i]}/sysroot"
+        export CPPFLAGS="--sysroot=${TOOLCHAINS}/${SYSTEMS[$i]}/sysroot"
+        export FFLAGS="--sysroot=${TOOLCHAINS}/${SYSTEMS[$i]}/sysroot"
+    
         # Build BLAS
+        echo -e "${colored}Building BLAS for ${SYSTEMS[$i]}${normal}" && echo 
         cd $BASE/ipopt/ThirdParty/Blas
-        mkdir -p build/$system && cd build/$system
-        ../../configure --prefix=$BUILD_DIR --disable-shared --with-pic
+        mkdir -p build/${SYSTEMS[$i]}
+        cd build/${SYSTEMS[$i]}
+        ../../configure --prefix=$BUILD_DIR --host="${HEADERS[$i]}" --disable-shared --with-pic
         make install
         cd $BASE
         
         # Build Lapack
+        echo -e "${colored}Building Lapack for ${SYSTEMS[$i]}${normal}" && echo 
         cd $BASE/ipopt/ThirdParty/Lapack
-        mkdir -p build/$system && cd build/$system
-        ../../configure --prefix=$BUILD_DIR --disable-shared --with-pic \
+        mkdir -p build/${SYSTEMS[$i]}
+        cd build/${SYSTEMS[$i]}
+        ../../configure --prefix=$BUILD_DIR --host="${HEADERS[$i]}" --disable-shared --with-pic \
             --with-blas="$BUILD_DIR/lib/libcoinblas.a -lgfortran"
         make install
         cd $BASE
     
         # Build IPOPT
+        echo -e "${colored}Building IPOPT for ${SYSTEMS[$i]}${normal}" && echo 
         cd $BASE/ipopt
-        ./configure --prefix=$BUILD_DIR coin_skip_warn_cxxflags=yes \
+        ./configure --prefix=$BUILD_DIR --host="${HEADERS[$i]}" --disable-shared --with-pic \
+            coin_skip_warn_cxxflags=yes \
             --with-blas="$prefix/lib/libcoinblas.a -lgfortran" \
             --with-lapack=$BUILD_DIR/lib/libcoinlapack.a
         make
-        make -j1 install
+        make -j4 install
         cd $BASE
         
         # Reset the sysroot and other variables
-        export SYSROOT=$_SYSROOT
-        export CC=$_CC
-        export CXX=$_CXX
-        export FC=$_FC
+        unset FC
+        unset F77
+        unset CC
+        unset CPP
+        unset CXX
+        unset LD
+        unset AR
+        unset AS
+        unset RANLIB
+        unset STRIP
     fi
 done
