@@ -30,6 +30,12 @@ declare -a ZIPS=("arm-linux-androideabi"
                  "mips64el-linux-android"
                  "x86"
                  "x86_64")
+declare -a LIBNAMES=("armeabi"
+                     "arm64-v8a"
+                     "mips"
+                     "mips64"
+                     "x86"
+                     "x86_64")
 N_SYSTEMS=${#SYSTEMS[@]}
 
 # Save the base directory
@@ -152,14 +158,35 @@ for (( i=0; i<${N_SYSTEMS}; i++ )) ; do
     
     mkdir -p $BASE/ipopt/build
     BUILD_DIR=$BASE/ipopt/build/${SYSTEMS[$i]}
+    
+    # Note that adding an ampersand at the end of the line should let the builds occur in parallel, but 
+    # that doesnt seem to be working.
     ( . ./_build_impl.sh ) &
 done
 
-exit 0
+echo -e "${colored}All of the build processes have been started. Now we wait. This may take an hour. Literally.${normal}" && echo 
+wait
+echo -e "${colored}Everything has been built!!! Congratulations. Now we will compress the relevant files into an archive for you.${normal}" && echo 
+
 # Finally, pack up all of the files we need a nice, convenient archive 
 ARCHIVE=${ARCHIVES}/ipopt_android.7z
-rm rf 
+rm -rf ${ARCHIVE}
+
+# We are going to copy all of the files to a separate folder, then just compress that folder 
+LIBS=${BASE}/libs
+mkdir -p ${LIBS}
+
+# First, copy the includes from one of the builds 
+cp -r ${BASE}/ipopt/build/arm/include ${LIBS}
+
+# Now copy the libraries 
 for (( i=0; i<${N_SYSTEMS}; i++ )) ; do 
-    BUILD_DIR=$BASE/ipopt/build/${SYSTEMS[$i]}
-    7z a ${ARCHIVE} ${BUILD_DIR}/lib/libcoinblas.a
-done
+    LIB=${LIBS}/${LIBNAMES[$i]}
+    mkdir -p ${LIB}
+    cp ${BASE}/ipopt/build/${SYSTEMS[$i]}/lib/*.a ${LIB}
+done 
+
+# Finally, compress everything
+7z a -t7z ${ARCHIVE} -m0=lzma2 -mx=9 -aoa ${LIBS}/* > tmp.log
+rm -rf ${LIBS}
+
