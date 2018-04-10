@@ -1,3 +1,4 @@
+# Exit if any error occurs
 set -e
 
 # Specify which version of IPOPT you want 
@@ -11,18 +12,24 @@ API="24"
 normal="\e[0m"
 colored="\e[104m"
 
-declare -a SYSTEMS=("arm64" 
-                    "arm" 
-                    "mips64" 
+declare -a SYSTEMS=("arm" 
+                    "arm64" 
                     "mips" 
+                    "mips64" 
                     "x86" 
                     "x86_64")
-declare -a HEADERS=("aarch64-linux-android"
-                    "arm-linux-androideabi"
-                    "mips64el-linux-android"
+declare -a HEADERS=("arm-linux-androideabi"
+                    "aarch64-linux-android"
                     "mipsel-linux-android"
-                    "x86"
-                    "x86_64")
+                    "mips64el-linux-android"
+                    "i686-linux-android"
+                    "x86_64-linux-android")
+declare -a ZIPS=("arm-linux-androideabi"
+                 "aarch64-linux-android"
+                 "mipsel-linux-android"
+                 "mips64el-linux-android"
+                 "x86"
+                 "x86_64")
 N_SYSTEMS=${#SYSTEMS[@]}
 
 # Save the base directory
@@ -48,144 +55,111 @@ for (( i=0; i<${N_SYSTEMS}; i++ )) ; do
         fi
         
         # Now unpack the toolchain
-        echo -e "${colored}Unpacking the standalone toolchain ${HEADERS[$i]}${normal}" && echo
+        echo -e "${colored}Unpacking the standalone toolchain ${SYSTEMS[$i]}${normal}" && echo
         mkdir -p ${TOOLCHAIN}
         7z x ${ARCHIVES}/${HEADERS[$i]}-4.9.7z -o${TOOLCHAIN} -aoa > 7z.log
         rm 7z.log
-        echo -e "${colored}Unpacked the standalone toolchain ${HEADERS[$i]}${normal}" && echo
+        echo -e "${colored}Unpacked the standalone toolchain ${SYSTEMS[$i]}${normal}" && echo
     fi
 done
 
 # Next, get IPOPT and its dependencies
 if [ ! -d ipopt ] ; then
 
-    # Make sure that we have "unzip" installed
-    if which unzip > /dev/null; then
-        echo ""
-    else
-        echo -e "${colored}To unpack IPOPT, we need 'unzip'. Please give us sudo rights to install it.${normal}" && echo 
-        sudo apt install -y unzip
-        echo ""
+    # First, let's see if perhaps we have the complete toolchain, ready to build
+    if [ ! -f ${ARCHIVES}/ipopt_before_building.7z ] ; then
+    
+        # We don't have it. So we have to download the individual IPOPT pieces...
+        
+        # See if we already have the ipopt zip already downloaded
+        if [ ! -f ${ARCHIVES}/ipopt.zip ] ; then
+            echo -e "${colored}Downloading IPOPT${normal}" && echo 
+            curl -o ${ARCHIVES}/ipopt.zip https://www.coin-or.org/download/source/Ipopt/Ipopt-${ipopt_version}.zip
+        fi
+        
+        # Now unzip the archive and rename the unzipped folder
+        if which unzip > /dev/null; then
+            echo ""
+        else
+            echo -e "${colored}To unpack IPOPT, we need 'unzip'. Please give us sudo rights to install it.${normal}" && echo 
+            sudo apt install -y unzip
+            echo ""
+        fi
+        echo -e "${colored}Unpacking IPOPT${normal}" && echo 
+        unzip ${ARCHIVES}/ipopt.zip
+        mv Ipopt-${ipopt_version} ipopt
+        
+        # Get all of the dependencies (we build later)
+        echo -e "${colored}Getting dependencies${normal}" && echo 
+        cd $BASE/ipopt/ThirdParty/Blas
+        ./get.Blas
+        cd $BASE/ipopt/ThirdParty/Lapack
+        ./get.Lapack
+        cd $BASE/ipopt/ThirdParty/ASL
+        ./get.ASL
+        cd $BASE/ipopt/ThirdParty/Mumps
+        ./get.Mumps
+        cd $BASE/ipopt/ThirdParty/Metis
+        ./get.Metis
+        cd $BASE
+
+        # Get the newest versions of config.guess and config.sub
+        if [ ! -f ${BASE}/config.guess ] ; then
+            echo -e "${colored}Downloading the newest version of config.guess${normal}" && echo 
+            wget -O config.guess 'http://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.guess;hb=HEAD'
+        fi
+        if [ ! -f ${BASE}/config.sub ] ; then
+            echo -e "${colored}Downloading the newest version of config.sub${normal}" && echo 
+            wget -O config.sub 'http://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.sub;hb=HEAD'
+        fi
+
+        # Replace config.guess and config.sub in all of the IPOPT files 
+        echo -e "${colored}Replacing config.guess${normal}" && echo 
+        find ${BASE}/ipopt -type f -name "config.guess" | while read file; do
+            cp ${BASE}/config.guess ${file}
+        done
+
+        echo -e "${colored}Replacing config.sub${normal}" && echo 
+        find ${BASE}/ipopt -type f -name "config.sub" | while read file; do
+            cp ${BASE}/config.sub ${file}
+        done
+
+        # There seems to be a problem in the configure scripts where they are accidentally grabbing an 
+        # extra ' when finding the math library. Specifically, it is found as -lm' instead of -lm
+        echo -e "${colored}Replacing FLIBS in configure files${normal}" && echo 
+        find ${BASE}/ipopt -type f -name "configure" | while read file; do
+            sed -i 's|FLIBS="$ac_cv_f77_libs"|FLIBS=${ac_cv_f77_libs/"-lm'"'"'"/"-lm"}|g' ${file}
+        done
+
+        # Finally, let's compress the ipopt repo so that if we want to rebuild, we don't have to go through all of that again. 
+        echo -e "${colored}Compressing IPOPT in case we want to return to this point${normal}" && echo 
+        7z a -t7z ${ARCHIVES}/ipopt_before_building.7z -m0=lzma2 -mx=9 -aoa ipopt > tmp.log
+        rm tmp.log
+      
+    else      
+        
+        # We do have the complete ipopt toolchain archived. Let's just unpack that 
+        echo -e "${colored}Unpacking IPOPT${normal}" && echo 
+        7z x ${ARCHIVES}/ipopt_before_building.7z -aoa > tmp.log
+        rm tmp.log
+
     fi
 
-    # Next, see if we already have the ipopt zip by chance... 
-    if [ ! -d ${ARCHIVES}/ipopt.zip ] ; then
-        echo -e "${colored}Downloading IPOPT${normal}" && echo 
-        curl -o ${ARCHIVES}/ipopt.zip https://www.coin-or.org/download/source/Ipopt/Ipopt-${ipopt_version}.zip
-    fi
-    
-    # Now unzip the archive and rename the unzipped folder
-    echo -e "${colored}Unpacking IPOPT${normal}" && echo 
-    unzip ${ARCHIVES}/ipopt.zip
-    mv Ipopt-${ipopt_version} ipopt
-    
-    # Get all of the dependencies (we build later)
-    echo -e "${colored}Getting dependencies${normal}" && echo 
-    cd $BASE/ipopt/ThirdParty/Blas
-    ./get.Blas
-    cd $BASE/ipopt/ThirdParty/Lapack
-    ./get.Lapack
-    cd $BASE/ipopt/ThirdParty/ASL
-    ./get.ASL
-    cd $BASE/ipopt/ThirdParty/Mumps
-    ./get.Mumps
-    cd $BASE/ipopt/ThirdParty/Metis
-    ./get.Metis
-    cd $BASE
-     
 fi
-
-# Get the newest versions of config.guess and config.sub
-if [ ! -f ${BASE}/config.guess ] ; then
-    echo -e "${colored}Downloading the newest version of config.guess${normal}" && echo 
-    wget -O config.guess 'http://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.guess;hb=HEAD'
-fi
-if [ ! -f ${BASE}/config.sub ] ; then
-    echo -e "${colored}Downloading the newest version of config.sub${normal}" && echo 
-    wget -O config.sub 'http://git.savannah.gnu.org/gitweb/?p=config.git;a=blob_plain;f=config.sub;hb=HEAD'
-fi
-
-# Replace config.guess and config.sub in all of the IPOPT files 
-echo -e "${colored}Replacing config.guess${normal}" && echo 
-find ${BASE}/ipopt -type f -name "config.guess" | while read file; do
-    cp ${BASE}/config.guess ${file}
-done
-
-echo -e "${colored}Replacing config.sub${normal}" && echo 
-find ${BASE}/ipopt -type f -name "config.sub" | while read file; do
-    cp ${BASE}/config.sub ${file}
-done
-
-# There seems to be a problem in the configure scripts where they are accidentally grabbing an 
-# extra ' when finding the math library. Specifically, it is found as -lm' instead of -lm
-echo -e "${colored}Replacing FLIBS in configure files${normal}" && echo 
-find ${BASE}/ipopt -type f -name "configure" | while read file; do
-    sed -i 's|FLIBS="$ac_cv_f77_libs"|FLIBS=${ac_cv_f77_libs/"-lm'"'"'"/"-lm"}|g' ${file}
-done
 
 # Now we will build BLAS, LAPACK, and IPOPT for each of the desired systems. 
 for (( i=0; i<${N_SYSTEMS}; i++ )) ; do 
     
     mkdir -p $BASE/ipopt/build
-    
-    # See if we already built for this system
-    if [ ! -d $BASE/ipopt/build/${SYSTEMS[$i]} ] ; then
-    
-        # Define the folder where we will dump all of the built files 
-        BUILD_DIR=$BASE/ipopt/build/${SYSTEMS[$i]}
-        
-        # Specify the variables for compiling
-        TOOLCHAIN_BIN=${TOOLCHAINS}/${SYSTEMS[$i]}/bin
-        export F77=${TOOLCHAIN_BIN}/${HEADERS[$i]}-gfortran
-        export CC=${TOOLCHAIN_BIN}/${HEADERS[$i]}-gcc
-        export CPP=${TOOLCHAIN_BIN}/${HEADERS[$i]}-cpp
-        export CXX=${TOOLCHAIN_BIN}/${HEADERS[$i]}-g++
-        
-        export CFLAGS="--sysroot=${TOOLCHAINS}/${SYSTEMS[$i]}/sysroot"
-        export CXXFLAGS="--sysroot=${TOOLCHAINS}/${SYSTEMS[$i]}/sysroot"
-        export CPPFLAGS="--sysroot=${TOOLCHAINS}/${SYSTEMS[$i]}/sysroot"
-        export FFLAGS="--sysroot=${TOOLCHAINS}/${SYSTEMS[$i]}/sysroot"
-    
-        # Build BLAS
-        echo -e "${colored}Building BLAS for ${SYSTEMS[$i]}${normal}" && echo 
-        cd $BASE/ipopt/ThirdParty/Blas
-        mkdir -p build/${SYSTEMS[$i]}
-        cd build/${SYSTEMS[$i]}
-        ../../configure --prefix=$BUILD_DIR --host="${HEADERS[$i]}" --disable-shared --with-pic
-        make install
-        cd $BASE
-        
-        # Build Lapack
-        echo -e "${colored}Building Lapack for ${SYSTEMS[$i]}${normal}" && echo 
-        cd $BASE/ipopt/ThirdParty/Lapack
-        mkdir -p build/${SYSTEMS[$i]}
-        cd build/${SYSTEMS[$i]}
-        ../../configure --prefix=$BUILD_DIR --host="${HEADERS[$i]}" --disable-shared --with-pic \
-            --with-blas="$BUILD_DIR/libcoinblas.a -lgfortran"
-        make install
-        cd $BASE
-    
-        # Build IPOPT
-        echo -e "${colored}Building IPOPT for ${SYSTEMS[$i]}${normal}" && echo 
-        cd $BASE/ipopt
-        ./configure --prefix=$BUILD_DIR --host="${HEADERS[$i]}" --disable-shared --with-pic \
-            coin_skip_warn_cxxflags=yes \
-            --with-blas="$BUILD_DIR/libcoinblas.a -lgfortran" \
-            --with-lapack=$BUILD_DIR/libcoinlapack.a
-        make
-        make -j4 install
-        cd $BASE
-        
-        # Reset the sysroot and other variables
-        unset FC
-        unset F77
-        unset CC
-        unset CPP
-        unset CXX
-        unset LD
-        unset AR
-        unset AS
-        unset RANLIB
-        unset STRIP
-    fi
+    BUILD_DIR=$BASE/ipopt/build/${SYSTEMS[$i]}
+    ( . ./_build_impl.sh ) &
+done
+
+exit 0
+# Finally, pack up all of the files we need a nice, convenient archive 
+ARCHIVE=${ARCHIVES}/ipopt_android.7z
+rm rf 
+for (( i=0; i<${N_SYSTEMS}; i++ )) ; do 
+    BUILD_DIR=$BASE/ipopt/build/${SYSTEMS[$i]}
+    7z a ${ARCHIVE} ${BUILD_DIR}/lib/libcoinblas.a
 done
