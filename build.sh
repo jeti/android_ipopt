@@ -230,7 +230,7 @@ cp -r ${BASE}/ipopt/build/arm/include/coin/. ${LIBS}/include
 for (( i=0; i<${N_SYSTEMS}; i++ )) ; do 
     LIB=${LIBS}/${LIBNAMES[$i]}
     mkdir -p ${LIB}
-    cp ${BASE}/ipopt/build/${SYSTEMS[$i]}/lib/*.so* ${LIB}
+    cp ${BASE}/ipopt/build/${SYSTEMS[$i]}/lib/*.so ${LIB}
 done 
 
 # Finally, compress everything
