@@ -49,7 +49,7 @@ if [ ! -f ${BUILD_DIR}/lib/libipopt.a ] ; then
     cd ${BUILD_DIR}/tmp
     echo -e "${colored}Building IPOPT for ${SYSTEMS[$i]}${normal}" && echo 
     echo ${BUILD_DIR}/tmp
-    ../../../configure COIN_SKIP_PROJECTS='ASL' --prefix=$BUILD_DIR --host="${HEADERS[$i]}" --enable-static --with-pic \
+    ../../../configure COIN_SKIP_PROJECTS='ASL' --prefix=$BUILD_DIR --host="${HEADERS[$i]}" --with-pic --enable-static \
         coin_skip_warn_cxxflags=yes \
         --with-blas=BUILD \
         --with-lapack=BUILD > _configure.ipopt.log

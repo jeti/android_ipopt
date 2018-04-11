@@ -116,14 +116,12 @@ if [ ! -d ipopt ] ; then
         ./get.Blas
         cd $BASE/ipopt/ThirdParty/Lapack
         ./get.Lapack
-        cd $BASE/ipopt/ThirdParty/ASL
-        ./get.ASL
         cd $BASE/ipopt/ThirdParty/Mumps
         ./get.Mumps
         cd $BASE/ipopt/ThirdParty/Metis
         ./get.Metis
         cd $BASE
-
+        
         # Get the newest versions of config.guess and config.sub
         if [ ! -f ${BASE}/config.guess ] ; then
             echo -e "${colored}Downloading the newest version of config.guess${normal}" && echo 
@@ -151,7 +149,26 @@ if [ ! -d ipopt ] ; then
             sed -i 's|cross_compiling=no|cross_compiling=yes|g' ${file}
             sed -i 's|cross_compiling=maybe|cross_compiling=yes|g' ${file}
         done
-
+        
+        # Remove versioning 
+        echo -e "${colored}Removing versioning in the configure scripts${normal}" && echo 
+        find ${BASE}/ipopt -type f -name "configure" | while read file; do
+            sed -i 's|-version-info $coin_libversion|-avoid-version|g' ${file}
+            sed -i 's|coin_libversion=[[:digit:]]\+:[[:digit:]]\+:[[:digit:]]\+||g' ${file}
+            sed -i 's|need_version=yes|need_version=no|g' ${file}
+            sed -i 's|need_version=unknown|need_version=no|g' ${file}
+        done
+        find ${BASE}/ipopt -type f -name "coin.m4" | while read file; do
+            sed -i 's|-version-info $coin_libversion|-avoid-version|g' ${file}
+            sed -i 's|coin_libversion=[[:digit:]]\+:[[:digit:]]\+:[[:digit:]]\+||g' ${file}
+        done
+        find ${BASE}/ipopt -type f -name "libtool" | while read file; do
+            sed -i 's|avoid_version=no|avoid_version=yes|g' ${file}
+        done
+        find ${BASE}/ipopt -type f -name "ltmain.sh" | while read file; do
+            sed -i 's|avoid_version=no|avoid_version=yes|g' ${file}
+        done
+        
         # There seems to be a problem in the configure scripts where they are accidentally grabbing an 
         # extra ' when finding the math library. Specifically, it is found as -lm' instead of -lm
         echo -e "${colored}Replacing FLIBS in configure files${normal}" && echo 
@@ -188,10 +205,11 @@ done
 
 echo -e "${colored}All of the build processes have been started. Now we wait. This may take an hour. Literally.${normal}" && echo 
 wait
-echo -e "${colored}Everything has been built!!! Congratulations. Now we will compress the relevant files into an archive for you.${normal}" && echo 
+echo -e "${colored}Either everything has been built, or there was an error.${normal}" && echo 
 
 # Finally, pack up all of the files we need into two nice, convenient archives
 # We start with the static one
+echo -e "${colored}Archiving static libraries.${normal}" && echo 
 ARCHIVE=${ARCHIVES}/ipopt_android_static.7z
 rm -rf ${ARCHIVE}
 
@@ -205,16 +223,19 @@ cp -r ${BASE}/ipopt/build/arm/include/coin/. ${LIBS}/include
 
 # Now copy the libraries 
 for (( i=0; i<${N_SYSTEMS}; i++ )) ; do 
+    echo -e "${colored}Adding ${SYSTEMS[$i]} libraries.${normal}" && echo 
     LIB=${LIBS}/${LIBNAMES[$i]}
     mkdir -p ${LIB}
     cp ${BASE}/ipopt/build/${SYSTEMS[$i]}/lib/*.a ${LIB}
 done 
 
 # Finally, compress everything
+echo -e "${colored}Compressing static libraries.${normal}" && echo 
 7z a -t7z ${ARCHIVE} -m0=lzma2 -mx=9 -aoa ${LIBS}/* > tmp.log
 rm -rf ${LIBS}
 
 # Now the shared libraries
+echo -e "${colored}Archiving shared libraries.${normal}" && echo 
 ARCHIVE=${ARCHIVES}/ipopt_android_shared.7z
 rm -rf ${ARCHIVE}
 
@@ -228,11 +249,13 @@ cp -r ${BASE}/ipopt/build/arm/include/coin/. ${LIBS}/include
 
 # Now copy the libraries 
 for (( i=0; i<${N_SYSTEMS}; i++ )) ; do 
+    echo -e "${colored}Adding ${SYSTEMS[$i]} libraries.${normal}" && echo 
     LIB=${LIBS}/${LIBNAMES[$i]}
     mkdir -p ${LIB}
-    cp ${BASE}/ipopt/build/${SYSTEMS[$i]}/lib/*.so ${LIB}
+    cp ${BASE}/ipopt/build/${SYSTEMS[$i]}/lib/*.so* ${LIB}
 done 
 
 # Finally, compress everything
+echo -e "${colored}Compressing shared libraries.${normal}" && echo 
 7z a -t7z ${ARCHIVE} -m0=lzma2 -mx=9 -aoa ${LIBS}/* > tmp.log
 rm -rf ${LIBS}
