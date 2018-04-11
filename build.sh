@@ -36,6 +36,21 @@ declare -a LIBNAMES=("armeabi"
                      "mips64"
                      "x86"
                      "x86_64")
+                    
+# If you just want to compile for a single toolchain, you would do it like this:
+if [ ]; then
+
+    declare -a SYSTEMS=("x86" )
+    declare -a HEADERS=("i686-linux-android")
+    declare -a ZIPS=("x86")
+    declare -a LIBNAMES=("x86")
+
+    declare -a SYSTEMS=("x86_64")
+    declare -a HEADERS=("x86_64-linux-android")
+    declare -a ZIPS=("x86_64")
+    declare -a LIBNAMES=("x86_64")
+fi
+
 N_SYSTEMS=${#SYSTEMS[@]}
 
 # Save the base directory
@@ -53,17 +68,17 @@ for (( i=0; i<${N_SYSTEMS}; i++ )) ; do
     if [ ! -d ${TOOLCHAIN} ] ; then    
 
         # If we don't have the compressed toochain, download it  
-        if [ ! -f ${ARCHIVES}/${HEADERS[$i]}-4.9.7z ] ; then
+        if [ ! -f ${ARCHIVES}/${ZIPS[$i]}-4.9.7z ] ; then
 
             echo -e "${colored}Downloading the standalone toolchain ${SYSTEMS[$i]}${normal}" && echo
-            wget https://github.com/jeti/android_fortran/releases/download/toolchains/${SYSTEMS[$i]}-4.9.7z -P ${ARCHIVES}
+            wget https://github.com/jeti/android_fortran/releases/download/toolchains/${ZIPS[$i]}-4.9.7z -P ${ARCHIVES}
             echo -e "${colored}Downloaded the standalone toolchain ${SYSTEMS[$i]}${normal}" && echo
         fi
         
         # Now unpack the toolchain
         echo -e "${colored}Unpacking the standalone toolchain ${SYSTEMS[$i]}${normal}" && echo
         mkdir -p ${TOOLCHAIN}
-        7z x ${ARCHIVES}/${HEADERS[$i]}-4.9.7z -o${TOOLCHAIN} -aoa > 7z.log
+        7z x ${ARCHIVES}/${ZIPS[$i]}-4.9.7z -o${TOOLCHAIN} -aoa > 7z.log
         rm 7z.log
         echo -e "${colored}Unpacked the standalone toolchain ${SYSTEMS[$i]}${normal}" && echo
     fi
@@ -129,6 +144,13 @@ if [ ! -d ipopt ] ; then
         find ${BASE}/ipopt -type f -name "config.sub" | while read file; do
             cp ${BASE}/config.sub ${file}
         done
+        
+        # Force the cross-compiling flag. We get incorrect build errors if we don't do this 
+        echo -e "${colored}Forcing the cross-compiling flag in the configure scripts${normal}" && echo 
+        find ${BASE}/ipopt -type f -name "configure" | while read file; do
+            sed -i 's|cross_compiling=no|cross_compiling=yes|g' ${file}
+            sed -i 's|cross_compiling=maybe|cross_compiling=yes|g' ${file}
+        done
 
         # There seems to be a problem in the configure scripts where they are accidentally grabbing an 
         # extra ' when finding the math library. Specifically, it is found as -lm' instead of -lm
@@ -168,16 +190,18 @@ echo -e "${colored}All of the build processes have been started. Now we wait. Th
 wait
 echo -e "${colored}Everything has been built!!! Congratulations. Now we will compress the relevant files into an archive for you.${normal}" && echo 
 
-# Finally, pack up all of the files we need a nice, convenient archive 
-ARCHIVE=${ARCHIVES}/ipopt_android.7z
+# Finally, pack up all of the files we need into two nice, convenient archives
+# We start with the static one
+ARCHIVE=${ARCHIVES}/ipopt_android_static.7z
 rm -rf ${ARCHIVE}
 
-# We are going to copy all of the files to a separate folder, then just compress that folder 
+# Copy all of the files to a separate folder. Later we just compress that folder 
 LIBS=${BASE}/libs
 mkdir -p ${LIBS}
+mkdir -p ${LIBS}/include
 
-# First, copy the includes from one of the builds 
-cp -r ${BASE}/ipopt/build/arm/include ${LIBS}
+# Copy the includes from one of the builds 
+cp -r ${BASE}/ipopt/build/arm/include/coin/. ${LIBS}/include
 
 # Now copy the libraries 
 for (( i=0; i<${N_SYSTEMS}; i++ )) ; do 
@@ -190,3 +214,25 @@ done
 7z a -t7z ${ARCHIVE} -m0=lzma2 -mx=9 -aoa ${LIBS}/* > tmp.log
 rm -rf ${LIBS}
 
+# Now the shared libraries
+ARCHIVE=${ARCHIVES}/ipopt_android_shared.7z
+rm -rf ${ARCHIVE}
+
+# Copy all of the files to a separate folder. Later we just compress that folder 
+LIBS=${BASE}/libs
+mkdir -p ${LIBS}
+mkdir -p ${LIBS}/include
+
+# Copy the includes from one of the builds 
+cp -r ${BASE}/ipopt/build/arm/include/coin/. ${LIBS}/include
+
+# Now copy the libraries 
+for (( i=0; i<${N_SYSTEMS}; i++ )) ; do 
+    LIB=${LIBS}/${LIBNAMES[$i]}
+    mkdir -p ${LIB}
+    cp ${BASE}/ipopt/build/${SYSTEMS[$i]}/lib/*.so* ${LIB}
+done 
+
+# Finally, compress everything
+7z a -t7z ${ARCHIVE} -m0=lzma2 -mx=9 -aoa ${LIBS}/* > tmp.log
+rm -rf ${LIBS}

@@ -24,7 +24,7 @@ if [ ]; then
         cd $BASE/ipopt/ThirdParty/Blas
         mkdir -p build/${SYSTEMS[$i]}
         cd build/${SYSTEMS[$i]}
-        ../../configure --prefix=$BUILD_DIR --host="${HEADERS[$i]}" --disable-shared --with-pic > _configure.blas.log
+        ../../configure --prefix=$BUILD_DIR --host="${HEADERS[$i]}" --enable-static --with-pic > _configure.blas.log
         make -j4 install > _make.blas.log
         cd $BASE
     fi 
@@ -35,7 +35,7 @@ if [ ]; then
         cd $BASE/ipopt/ThirdParty/Lapack
         mkdir -p build/${SYSTEMS[$i]}
         cd build/${SYSTEMS[$i]}
-        ../../configure --prefix=$BUILD_DIR --host="${HEADERS[$i]}" --disable-shared --with-pic \
+        ../../configure --prefix=$BUILD_DIR --host="${HEADERS[$i]}" --enable-static --with-pic \
             --with-blas=BUILD > _configure.lapack.log
         make -j4 install > _make.lapack.log
         cd $BASE
@@ -49,7 +49,7 @@ if [ ! -f ${BUILD_DIR}/lib/libipopt.a ] ; then
     cd ${BUILD_DIR}/tmp
     echo -e "${colored}Building IPOPT for ${SYSTEMS[$i]}${normal}" && echo 
     echo ${BUILD_DIR}/tmp
-    ../../../configure COIN_SKIP_PROJECTS='ASL' --prefix=$BUILD_DIR --host="${HEADERS[$i]}" --disable-shared --with-pic \
+    ../../../configure COIN_SKIP_PROJECTS='ASL' --prefix=$BUILD_DIR --host="${HEADERS[$i]}" --enable-static --with-pic \
         coin_skip_warn_cxxflags=yes \
         --with-blas=BUILD \
         --with-lapack=BUILD > _configure.ipopt.log

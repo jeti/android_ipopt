@@ -3,3 +3,4 @@ config.guess
 config.sub
 ipopt
 standalone_toolchains
+*.log
