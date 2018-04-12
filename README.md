@@ -34,4 +34,4 @@ Both of these archives contain the libraries for all of the possible Android arc
 - x86
 - x86_64
 
-The archives are packaged so that you can simply unpack them into the `libs` folder of your Android project. 
+The archives are packaged so that you can simply unpack them into the `libs` folder of your Android project. To see a simple example project demonstrating this, head on over to https://github.com/jeti/android_ipopt_example.
