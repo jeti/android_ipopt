@@ -216,10 +216,9 @@ rm -rf ${ARCHIVE}
 # Copy all of the files to a separate folder. Later we just compress that folder 
 LIBS=${BASE}/libs
 mkdir -p ${LIBS}
-mkdir -p ${LIBS}/include
 
 # Copy the includes from one of the builds 
-cp -r ${BASE}/ipopt/build/arm/include/coin/. ${LIBS}/include
+cp -r ${BASE}/ipopt/build/arm/include ${LIBS}
 
 # Now copy the libraries 
 for (( i=0; i<${N_SYSTEMS}; i++ )) ; do 
@@ -242,10 +241,9 @@ rm -rf ${ARCHIVE}
 # Copy all of the files to a separate folder. Later we just compress that folder 
 LIBS=${BASE}/libs
 mkdir -p ${LIBS}
-mkdir -p ${LIBS}/include
 
 # Copy the includes from one of the builds 
-cp -r ${BASE}/ipopt/build/arm/include/coin/. ${LIBS}/include
+cp -r ${BASE}/ipopt/build/arm/include ${LIBS}
 
 # Now copy the libraries 
 for (( i=0; i<${N_SYSTEMS}; i++ )) ; do 
